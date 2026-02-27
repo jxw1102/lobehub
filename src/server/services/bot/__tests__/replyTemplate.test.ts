@@ -57,7 +57,7 @@ describe('replyTemplate', () => {
             ],
           }),
         ),
-      ).toBe('Let me search for that.\n\n○ builtin·web_search(query: "latest news")');
+      ).toBe('Let me search for that.\n\n○ **builtin·web_search**(query: "latest news")');
     });
 
     it('should show multiple pending tool calls on separate lines with hollow circles', () => {
@@ -76,7 +76,7 @@ describe('replyTemplate', () => {
           }),
         ),
       ).toBe(
-        '○ builtin·search(q: "test")\n○ lobe-web-browsing·readUrl(url: "https://example.com")',
+        '○ **builtin·search**(q: "test")\n○ **lobe-web-browsing·readUrl**(url: "https://example.com")',
       );
     });
 
@@ -88,7 +88,7 @@ describe('replyTemplate', () => {
             toolsCalling: [{ apiName: 'get_time', identifier: 'builtin' }],
           }),
         ),
-      ).toBe('○ builtin·get_time');
+      ).toBe('○ **builtin·get_time**');
     });
 
     it('should handle tool calls with invalid JSON args gracefully', () => {
@@ -99,7 +99,7 @@ describe('replyTemplate', () => {
             toolsCalling: [{ apiName: 'broken', arguments: 'not json', identifier: 'plugin' }],
           }),
         ),
-      ).toBe('○ plugin·broken');
+      ).toBe('○ **plugin·broken**');
     });
 
     it('should omit identifier when empty', () => {
@@ -110,7 +110,7 @@ describe('replyTemplate', () => {
             toolsCalling: [{ apiName: 'search', arguments: '{"q":"test"}', identifier: '' }],
           }),
         ),
-      ).toBe('○ search(q: "test")');
+      ).toBe('○ **search**(q: "test")');
     });
 
     it('should fall back to lastContent when no content', () => {
@@ -122,7 +122,7 @@ describe('replyTemplate', () => {
             toolsCalling: [{ apiName: 'search', identifier: 'builtin' }],
           }),
         ),
-      ).toBe('Previous response\n\n○ builtin·search');
+      ).toBe('Previous response\n\n○ **builtin·search**');
     });
 
     it('should show thinking when only reasoning present', () => {
@@ -172,7 +172,7 @@ describe('replyTemplate', () => {
           }),
         ),
       ).toBe(
-        `I will search for that.\n\n⏺ builtin·web_search(query: "test")\n  ⎿  Found 3 results\n\n${emoji.thinking} Processing...`,
+        `I will search for that.\n\n⏺ **builtin·web_search**(query: "test")\n  ⎿  Found 3 results\n\n${emoji.thinking} Processing...`,
       );
     });
 
@@ -185,7 +185,7 @@ describe('replyTemplate', () => {
             toolsResult: [{ apiName: 'get_time', identifier: 'builtin' }],
           }),
         ),
-      ).toBe(`⏺ builtin·get_time\n\n${emoji.thinking} Processing...`);
+      ).toBe(`⏺ **builtin·get_time**\n\n${emoji.thinking} Processing...`);
     });
 
     it('should show multiple completed tools with results', () => {
@@ -212,7 +212,7 @@ describe('replyTemplate', () => {
           }),
         ),
       ).toBe(
-        `⏺ builtin·search(q: "test")\n  ⎿  Found 5 results\n⏺ lobe-web-browsing·readUrl(url: "https://example.com")\n  ⎿  Page loaded successfully\n\n${emoji.thinking} Processing...`,
+        `⏺ **builtin·search**(q: "test")\n  ⎿  Found 5 results\n⏺ **lobe-web-browsing·readUrl**(url: "https://example.com")\n  ⎿  Page loaded successfully\n\n${emoji.thinking} Processing...`,
       );
     });
 
@@ -285,22 +285,34 @@ describe('replyTemplate', () => {
   // ==================== renderFinalReply ====================
 
   describe('renderFinalReply', () => {
-    it('should append usage footer with tokens and cost', () => {
+    it('should append usage footer with tokens, cost, and call counts', () => {
       expect(
-        renderFinalReply('Here is the answer.', { totalCost: 0.0312, totalTokens: 1234 }),
-      ).toBe('Here is the answer.\n\n---\n**1.2k** tokens · $0.0312');
+        renderFinalReply('Here is the answer.', {
+          llmCalls: 5,
+          toolCalls: 4,
+          totalCost: 0.0312,
+          totalTokens: 1234,
+        }),
+      ).toBe(
+        'Here is the answer.\n\n---\n**1.2k** tokens · $0.0312 | llm×5 | tools×4',
+      );
     });
 
     it('should handle zero usage', () => {
-      expect(renderFinalReply('Done.', { totalCost: 0, totalTokens: 0 })).toBe(
-        'Done.\n\n---\n**0** tokens · $0.0000',
-      );
+      expect(
+        renderFinalReply('Done.', { llmCalls: 0, toolCalls: 0, totalCost: 0, totalTokens: 0 }),
+      ).toBe('Done.\n\n---\n**0** tokens · $0.0000 | llm×0 | tools×0');
     });
 
     it('should format large token counts', () => {
-      expect(renderFinalReply('Result', { totalCost: 1.5, totalTokens: 1_234_567 })).toBe(
-        'Result\n\n---\n**1.2m** tokens · $1.5000',
-      );
+      expect(
+        renderFinalReply('Result', {
+          llmCalls: 10,
+          toolCalls: 20,
+          totalCost: 1.5,
+          totalTokens: 1_234_567,
+        }),
+      ).toBe('Result\n\n---\n**1.2m** tokens · $1.5000 | llm×10 | tools×20');
     });
   });
 
@@ -326,7 +338,7 @@ describe('replyTemplate', () => {
             toolsCalling: [{ apiName: 'search', arguments: '{"q":"test"}', identifier: 'builtin' }],
           }),
         ),
-      ).toBe('Looking into it\n\n○ builtin·search(q: "test")');
+      ).toBe('Looking into it\n\n○ **builtin·search**(q: "test")');
     });
 
     it('should dispatch to renderToolExecuting for call_tool with completed tools', () => {
@@ -343,7 +355,7 @@ describe('replyTemplate', () => {
           }),
         ),
       ).toBe(
-        `Previous content\n\n⏺ builtin·search(q: "test")\n  ⎿  Found results\n\n${emoji.thinking} Processing...`,
+        `Previous content\n\n⏺ **builtin·search**(q: "test")\n  ⎿  Found results\n\n${emoji.thinking} Processing...`,
       );
     });
   });

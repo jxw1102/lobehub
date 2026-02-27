@@ -16,8 +16,8 @@ export interface RenderStepParams extends StepPresentationData {
 // ==================== Helpers ====================
 
 function formatToolName(tc: { apiName: string; identifier: string }): string {
-  if (tc.identifier) return `${tc.identifier}·${tc.apiName}`;
-  return tc.apiName;
+  if (tc.identifier) return `**${tc.identifier}·${tc.apiName}**`;
+  return `**${tc.apiName}**`;
 }
 
 function formatToolCall(tc: ToolCallItem): string {
@@ -75,8 +75,16 @@ export function formatTokens(tokens: number): string {
   return String(tokens);
 }
 
-function renderUsageFooter(totalTokens: number, totalCost: number): string {
-  return `---\n**${formatTokens(totalTokens)}** tokens · $${totalCost.toFixed(4)}`;
+interface UsageFooterParams {
+  llmCalls: number;
+  toolCalls: number;
+  totalCost: number;
+  totalTokens: number;
+}
+
+function renderUsageFooter(params: UsageFooterParams): string {
+  const { totalTokens, totalCost, llmCalls, toolCalls } = params;
+  return `---\n**${formatTokens(totalTokens)}** tokens · $${totalCost.toFixed(4)} | llm×${llmCalls} | tools×${toolCalls}`;
 }
 
 // ==================== 1. Start ====================
@@ -145,9 +153,9 @@ export function renderToolExecuting(params: RenderStepParams): string {
 
 export function renderFinalReply(
   content: string,
-  params: { totalCost: number; totalTokens: number },
+  params: { llmCalls: number; toolCalls: number; totalCost: number; totalTokens: number },
 ): string {
-  return `${content}\n\n${renderUsageFooter(params.totalTokens, params.totalCost)}`;
+  return `${content}\n\n${renderUsageFooter(params)}`;
 }
 
 export function renderError(errorMessage: string): string {

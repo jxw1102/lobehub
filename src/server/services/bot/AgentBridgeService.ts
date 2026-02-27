@@ -256,6 +256,8 @@ export class AgentBridgeService {
                     try {
                       await progressMessage.edit(
                         renderFinalReply(lastAssistantContent, {
+                          llmCalls: finalState.usage?.llm?.apiCalls ?? 0,
+                          toolCalls: finalState.usage?.tools?.totalCalls ?? 0,
                           totalCost: finalState.cost?.total ?? 0,
                           totalTokens: finalState.usage?.llm?.tokens?.total ?? 0,
                         }),
