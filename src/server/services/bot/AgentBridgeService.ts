@@ -12,7 +12,6 @@ import {
   renderStart,
   renderStepProgress,
   splitMessage,
-  truncateMessage,
 } from './replyTemplate';
 
 const log = debug('lobe-server:bot:agent-bridge');
@@ -195,6 +194,7 @@ export class AgentBridgeService {
       | Array<{ apiName: string; arguments?: string; identifier: string }>
       | undefined;
     let totalToolCalls = 0;
+    const startTime = Date.now();
 
     return new Promise<{ reply: string; topicId: string }>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -220,6 +220,7 @@ export class AgentBridgeService {
 
               const progressText = renderStepProgress({
                 ...stepData,
+                elapsedMs: Date.now() - startTime,
                 lastContent: lastLLMContent,
                 lastToolsCalling,
                 totalToolCalls,
@@ -229,7 +230,7 @@ export class AgentBridgeService {
               if (toolsCalling) lastToolsCalling = toolsCalling;
 
               try {
-                progressMessage = await progressMessage.edit(truncateMessage(progressText));
+                progressMessage = await progressMessage.edit(progressText);
               } catch (error) {
                 log('executeWithCallback: failed to edit progress message: %O', error);
               }
@@ -264,6 +265,7 @@ export class AgentBridgeService {
 
                 if (lastAssistantContent) {
                   const finalText = renderFinalReply(lastAssistantContent, {
+                    elapsedMs: Date.now() - startTime,
                     llmCalls: finalState.usage?.llm?.apiCalls ?? 0,
                     toolCalls: finalState.usage?.tools?.totalCalls ?? 0,
                     totalCost: finalState.cost?.total ?? 0,

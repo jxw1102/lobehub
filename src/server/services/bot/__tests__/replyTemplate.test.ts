@@ -12,7 +12,6 @@ import {
   renderToolExecuting,
   splitMessage,
   summarizeOutput,
-  truncateMessage,
 } from '../replyTemplate';
 
 // Helper to build a minimal RenderStepParams with defaults
@@ -386,24 +385,6 @@ describe('replyTemplate', () => {
     it('should handle multiple chunks', () => {
       const text = 'chunk1\n\nchunk2\n\nchunk3';
       expect(splitMessage(text, 10)).toEqual(['chunk1', 'chunk2', 'chunk3']);
-    });
-  });
-
-  // ==================== truncateMessage ====================
-
-  describe('truncateMessage', () => {
-    it('should return text as-is when under limit', () => {
-      expect(truncateMessage('short', 100)).toBe('short');
-    });
-
-    it('should truncate and append ... when over limit', () => {
-      const text = 'a'.repeat(120);
-      expect(truncateMessage(text, 100)).toBe('a'.repeat(97) + '...');
-    });
-
-    it('should handle exact limit', () => {
-      const text = 'a'.repeat(100);
-      expect(truncateMessage(text, 100)).toBe(text);
     });
   });
 });

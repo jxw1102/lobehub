@@ -5,7 +5,7 @@ import { randomAck } from './ackPhrases';
 
 // ==================== Message Splitting ====================
 
-const DEFAULT_CHAR_LIMIT = 2000;
+const DEFAULT_CHAR_LIMIT = 1800;
 
 export function splitMessage(text: string, limit = DEFAULT_CHAR_LIMIT): string[] {
   if (text.length <= limit) return [text];
@@ -33,17 +33,13 @@ export function splitMessage(text: string, limit = DEFAULT_CHAR_LIMIT): string[]
   return chunks;
 }
 
-export function truncateMessage(text: string, limit = DEFAULT_CHAR_LIMIT): string {
-  if (text.length <= limit) return text;
-  return text.slice(0, limit - 3) + '...';
-}
-
 // ==================== Params ====================
 
 type ToolCallItem = { apiName: string; arguments?: string; identifier: string };
 type ToolResultItem = { apiName: string; identifier: string; output?: string };
 
 export interface RenderStepParams extends StepPresentationData {
+  elapsedMs?: number;
   lastContent?: string;
   lastToolsCalling?: ToolCallItem[];
   totalToolCalls?: number;
@@ -111,7 +107,17 @@ export function formatTokens(tokens: number): string {
   return String(tokens);
 }
 
+export function formatDuration(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes > 0) return `${minutes}m${seconds}s`;
+  return `${seconds}s`;
+}
+
 interface UsageFooterParams {
+  elapsedMs?: number;
   llmCalls: number;
   toolCalls: number;
   totalCost: number;
@@ -119,22 +125,26 @@ interface UsageFooterParams {
 }
 
 function renderUsageFooter(params: UsageFooterParams): string {
-  const { totalTokens, totalCost, llmCalls, toolCalls } = params;
-  return `---\n**${formatTokens(totalTokens)}** tokens · $${totalCost.toFixed(4)} | llm×${llmCalls} | tools×${toolCalls}`;
+  const { totalTokens, totalCost, llmCalls, toolCalls, elapsedMs } = params;
+  const time = elapsedMs && elapsedMs > 0 ? ` · ${formatDuration(elapsedMs)}` : '';
+  return `---\n**${formatTokens(totalTokens)}** tokens · $${totalCost.toFixed(4)}${time} | llm×${llmCalls} | tools×${toolCalls}`;
 }
 
 function renderInlineStats(params: {
+  elapsedMs?: number;
   totalCost: number;
   totalTokens: number;
   totalToolCalls?: number;
 }): { footer: string; header: string } {
-  const { totalToolCalls, totalTokens, totalCost } = params;
+  const { elapsedMs, totalToolCalls, totalTokens, totalCost } = params;
 
   const header =
     totalToolCalls && totalToolCalls > 0 ? `> total **${totalToolCalls}** tools calling\n\n` : '';
 
-  const footer =
-    totalTokens > 0 ? `\n\n-# ${formatTokens(totalTokens)} tokens · $${totalCost.toFixed(4)}` : '';
+  if (totalTokens <= 0) return { footer: '', header };
+
+  const time = elapsedMs && elapsedMs > 0 ? ` · ${formatDuration(elapsedMs)}` : '';
+  const footer = `\n\n-# ${formatTokens(totalTokens)} tokens · $${totalCost.toFixed(4)}${time}`;
 
   return { footer, header };
 }
@@ -154,10 +164,23 @@ export function renderStart(): string {
  * - has tool calls (about to execute tools)
  */
 export function renderLLMGenerating(params: RenderStepParams): string {
-  const { content, lastContent, reasoning, toolsCalling, totalCost, totalTokens, totalToolCalls } =
-    params;
+  const {
+    content,
+    elapsedMs,
+    lastContent,
+    reasoning,
+    toolsCalling,
+    totalCost,
+    totalTokens,
+    totalToolCalls,
+  } = params;
   const displayContent = content || lastContent;
-  const { header, footer } = renderInlineStats({ totalCost, totalTokens, totalToolCalls });
+  const { header, footer } = renderInlineStats({
+    elapsedMs,
+    totalCost,
+    totalTokens,
+    totalToolCalls,
+  });
 
   // Sub-state: LLM decided to call tools → show content + pending tool calls (○)
   if (toolsCalling && toolsCalling.length > 0) {
@@ -187,9 +210,21 @@ export function renderLLMGenerating(params: RenderStepParams): string {
  * Shows completed tools with results (⏺).
  */
 export function renderToolExecuting(params: RenderStepParams): string {
-  const { lastContent, lastToolsCalling, toolsResult, totalCost, totalTokens, totalToolCalls } =
-    params;
-  const { header, footer } = renderInlineStats({ totalCost, totalTokens, totalToolCalls });
+  const {
+    elapsedMs,
+    lastContent,
+    lastToolsCalling,
+    toolsResult,
+    totalCost,
+    totalTokens,
+    totalToolCalls,
+  } = params;
+  const { header, footer } = renderInlineStats({
+    elapsedMs,
+    totalCost,
+    totalTokens,
+    totalToolCalls,
+  });
 
   const parts: string[] = [];
 
@@ -211,7 +246,13 @@ export function renderToolExecuting(params: RenderStepParams): string {
 
 export function renderFinalReply(
   content: string,
-  params: { llmCalls: number; toolCalls: number; totalCost: number; totalTokens: number },
+  params: {
+    elapsedMs?: number;
+    llmCalls: number;
+    toolCalls: number;
+    totalCost: number;
+    totalTokens: number;
+  },
 ): string {
   return `${content}\n\n${renderUsageFooter(params)}`;
 }
