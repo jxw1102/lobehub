@@ -3,6 +3,41 @@ import { emoji } from 'chat';
 import type { StepPresentationData } from '../agentRuntime/types';
 import { randomAck } from './ackPhrases';
 
+// ==================== Message Splitting ====================
+
+const DEFAULT_CHAR_LIMIT = 2000;
+
+export function splitMessage(text: string, limit = DEFAULT_CHAR_LIMIT): string[] {
+  if (text.length <= limit) return [text];
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= limit) {
+      chunks.push(remaining);
+      break;
+    }
+
+    // Try to find a paragraph break
+    let splitAt = remaining.lastIndexOf('\n\n', limit);
+    // Fall back to line break
+    if (splitAt <= 0) splitAt = remaining.lastIndexOf('\n', limit);
+    // Hard cut
+    if (splitAt <= 0) splitAt = limit;
+
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).replace(/^\n+/, '');
+  }
+
+  return chunks;
+}
+
+export function truncateMessage(text: string, limit = DEFAULT_CHAR_LIMIT): string {
+  if (text.length <= limit) return text;
+  return text.slice(0, limit - 3) + '...';
+}
+
 // ==================== Params ====================
 
 type ToolCallItem = { apiName: string; arguments?: string; identifier: string };
@@ -11,6 +46,7 @@ type ToolResultItem = { apiName: string; identifier: string; output?: string };
 export interface RenderStepParams extends StepPresentationData {
   lastContent?: string;
   lastToolsCalling?: ToolCallItem[];
+  totalToolCalls?: number;
 }
 
 // ==================== Helpers ====================
@@ -87,6 +123,22 @@ function renderUsageFooter(params: UsageFooterParams): string {
   return `---\n**${formatTokens(totalTokens)}** tokens · $${totalCost.toFixed(4)} | llm×${llmCalls} | tools×${toolCalls}`;
 }
 
+function renderInlineStats(params: {
+  totalCost: number;
+  totalTokens: number;
+  totalToolCalls?: number;
+}): { footer: string; header: string } {
+  const { totalToolCalls, totalTokens, totalCost } = params;
+
+  const header =
+    totalToolCalls && totalToolCalls > 0 ? `> total **${totalToolCalls}** tools calling\n\n` : '';
+
+  const footer =
+    totalTokens > 0 ? `\n\n-# ${formatTokens(totalTokens)} tokens · $${totalCost.toFixed(4)}` : '';
+
+  return { footer, header };
+}
+
 // ==================== 1. Start ====================
 
 export function renderStart(): string {
@@ -102,28 +154,30 @@ export function renderStart(): string {
  * - has tool calls (about to execute tools)
  */
 export function renderLLMGenerating(params: RenderStepParams): string {
-  const { content, lastContent, reasoning, toolsCalling } = params;
+  const { content, lastContent, reasoning, toolsCalling, totalCost, totalTokens, totalToolCalls } =
+    params;
   const displayContent = content || lastContent;
+  const { header, footer } = renderInlineStats({ totalCost, totalTokens, totalToolCalls });
 
   // Sub-state: LLM decided to call tools → show content + pending tool calls (○)
   if (toolsCalling && toolsCalling.length > 0) {
     const toolsList = formatPendingTools(toolsCalling);
 
-    if (displayContent) return `${displayContent}\n\n${toolsList}`;
-    return toolsList;
+    if (displayContent) return `${header}${displayContent}\n\n${toolsList}${footer}`;
+    return `${header}${toolsList}${footer}`;
   }
 
   // Sub-state: has reasoning (thinking)
   if (reasoning && !content) {
-    return `${emoji.thinking} ${reasoning}`;
+    return `${header}${emoji.thinking} ${reasoning}${footer}`;
   }
 
   // Sub-state: pure text content (waiting for next step)
   if (displayContent) {
-    return `${displayContent}\n\n`;
+    return `${header}${displayContent}\n\n${footer}`;
   }
 
-  return `${emoji.thinking} Processing...`;
+  return `${header}${emoji.thinking} Processing...${footer}`;
 }
 
 // ==================== 3. Tool Executing ====================
@@ -133,9 +187,13 @@ export function renderLLMGenerating(params: RenderStepParams): string {
  * Shows completed tools with results (⏺).
  */
 export function renderToolExecuting(params: RenderStepParams): string {
-  const { lastContent, lastToolsCalling, toolsResult } = params;
+  const { lastContent, lastToolsCalling, toolsResult, totalCost, totalTokens, totalToolCalls } =
+    params;
+  const { header, footer } = renderInlineStats({ totalCost, totalTokens, totalToolCalls });
 
   const parts: string[] = [];
+
+  if (header) parts.push(header.trimEnd());
 
   if (lastContent) parts.push(lastContent);
 
@@ -146,7 +204,7 @@ export function renderToolExecuting(params: RenderStepParams): string {
     parts.push(`${emoji.thinking} Processing...`);
   }
 
-  return parts.join('\n\n');
+  return parts.join('\n\n') + footer;
 }
 
 // ==================== 4. Final Output ====================

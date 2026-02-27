@@ -10,7 +10,9 @@ import {
   renderStart,
   renderStepProgress,
   renderToolExecuting,
+  splitMessage,
   summarizeOutput,
+  truncateMessage,
 } from '../replyTemplate';
 
 // Helper to build a minimal RenderStepParams with defaults
@@ -293,9 +295,7 @@ describe('replyTemplate', () => {
           totalCost: 0.0312,
           totalTokens: 1234,
         }),
-      ).toBe(
-        'Here is the answer.\n\n---\n**1.2k** tokens · $0.0312 | llm×5 | tools×4',
-      );
+      ).toBe('Here is the answer.\n\n---\n**1.2k** tokens · $0.0312 | llm×5 | tools×4');
     });
 
     it('should handle zero usage', () => {
@@ -357,6 +357,53 @@ describe('replyTemplate', () => {
       ).toBe(
         `Previous content\n\n⏺ **builtin·search**(q: "test")\n  ⎿  Found results\n\n${emoji.thinking} Processing...`,
       );
+    });
+  });
+
+  // ==================== splitMessage ====================
+
+  describe('splitMessage', () => {
+    it('should return single chunk for short text', () => {
+      expect(splitMessage('hello', 100)).toEqual(['hello']);
+    });
+
+    it('should split at paragraph boundary', () => {
+      const text = 'a'.repeat(80) + '\n\n' + 'b'.repeat(80);
+      expect(splitMessage(text, 100)).toEqual(['a'.repeat(80), 'b'.repeat(80)]);
+    });
+
+    it('should split at line boundary when no paragraph break fits', () => {
+      const text = 'a'.repeat(80) + '\n' + 'b'.repeat(80);
+      expect(splitMessage(text, 100)).toEqual(['a'.repeat(80), 'b'.repeat(80)]);
+    });
+
+    it('should hard-cut when no break found', () => {
+      const text = 'a'.repeat(250);
+      const chunks = splitMessage(text, 100);
+      expect(chunks).toEqual(['a'.repeat(100), 'a'.repeat(100), 'a'.repeat(50)]);
+    });
+
+    it('should handle multiple chunks', () => {
+      const text = 'chunk1\n\nchunk2\n\nchunk3';
+      expect(splitMessage(text, 10)).toEqual(['chunk1', 'chunk2', 'chunk3']);
+    });
+  });
+
+  // ==================== truncateMessage ====================
+
+  describe('truncateMessage', () => {
+    it('should return text as-is when under limit', () => {
+      expect(truncateMessage('short', 100)).toBe('short');
+    });
+
+    it('should truncate and append ... when over limit', () => {
+      const text = 'a'.repeat(120);
+      expect(truncateMessage(text, 100)).toBe('a'.repeat(97) + '...');
+    });
+
+    it('should handle exact limit', () => {
+      const text = 'a'.repeat(100);
+      expect(truncateMessage(text, 100)).toBe(text);
     });
   });
 });

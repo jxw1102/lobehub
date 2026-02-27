@@ -6,7 +6,14 @@ import debug from 'debug';
 import { getServerDB } from '@/database/core/db-adaptor';
 import { AiAgentService } from '@/server/services/aiAgent';
 
-import { renderError, renderFinalReply, renderStart, renderStepProgress } from './replyTemplate';
+import {
+  renderError,
+  renderFinalReply,
+  renderStart,
+  renderStepProgress,
+  splitMessage,
+  truncateMessage,
+} from './replyTemplate';
 
 const log = debug('lobe-server:bot:agent-bridge');
 
@@ -187,6 +194,7 @@ export class AgentBridgeService {
     let lastToolsCalling:
       | Array<{ apiName: string; arguments?: string; identifier: string }>
       | undefined;
+    let totalToolCalls = 0;
 
     return new Promise<{ reply: string; topicId: string }>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -208,17 +216,20 @@ export class AgentBridgeService {
               const { content, shouldContinue, toolsCalling } = stepData;
               if (!shouldContinue || !progressMessage) return;
 
+              if (toolsCalling) totalToolCalls += toolsCalling.length;
+
               const progressText = renderStepProgress({
                 ...stepData,
                 lastContent: lastLLMContent,
                 lastToolsCalling,
+                totalToolCalls,
               });
 
               if (content) lastLLMContent = content;
               if (toolsCalling) lastToolsCalling = toolsCalling;
 
               try {
-                progressMessage = await progressMessage.edit(progressText);
+                progressMessage = await progressMessage.edit(truncateMessage(progressText));
               } catch (error) {
                 log('executeWithCallback: failed to edit progress message: %O', error);
               }
@@ -252,24 +263,31 @@ export class AgentBridgeService {
                   )?.content;
 
                 if (lastAssistantContent) {
+                  const finalText = renderFinalReply(lastAssistantContent, {
+                    llmCalls: finalState.usage?.llm?.apiCalls ?? 0,
+                    toolCalls: finalState.usage?.tools?.totalCalls ?? 0,
+                    totalCost: finalState.cost?.total ?? 0,
+                    totalTokens: finalState.usage?.llm?.tokens?.total ?? 0,
+                  });
+
+                  const chunks = splitMessage(finalText);
+
                   if (progressMessage) {
                     try {
-                      await progressMessage.edit(
-                        renderFinalReply(lastAssistantContent, {
-                          llmCalls: finalState.usage?.llm?.apiCalls ?? 0,
-                          toolCalls: finalState.usage?.tools?.totalCalls ?? 0,
-                          totalCost: finalState.cost?.total ?? 0,
-                          totalTokens: finalState.usage?.llm?.tokens?.total ?? 0,
-                        }),
-                      );
+                      await progressMessage.edit(chunks[0]);
+                      // Post overflow chunks as follow-up messages
+                      for (let i = 1; i < chunks.length; i++) {
+                        await thread.post(chunks[i]);
+                      }
                     } catch (error) {
                       log('executeWithCallback: failed to edit final progress message: %O', error);
                     }
                   }
 
                   log(
-                    'executeWithCallback: got response from finalState (%d chars)',
+                    'executeWithCallback: got response from finalState (%d chars, %d chunks)',
                     lastAssistantContent.length,
+                    chunks.length,
                   );
                   resolve({ reply: lastAssistantContent, topicId: resolvedTopicId });
                   return;
