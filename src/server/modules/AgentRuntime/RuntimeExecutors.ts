@@ -799,16 +799,14 @@ export const createRuntimeExecutors = (
 
           events.push({ id: chatToolPayload.id, result: executionResult, type: 'tool_result' });
 
-          // Accumulate usage
+          // Collect per-tool usage for post-batch accumulation
           const toolCost = TOOL_PRICING[toolName] || 0;
-          UsageCounter.accumulateTool({
-            cost: state.cost,
+          toolResults.at(-1).usageParams = {
             executionTime,
             success: isSuccess,
             toolCost,
             toolName,
-            usage: state.usage,
-          });
+          };
         } catch (error) {
           console.error(`[${operationLogId}] Tool execution failed for ${toolName}:`, error);
 
@@ -831,8 +829,21 @@ export const createRuntimeExecutors = (
       `[${operationLogId}][call_tools_batch] All tools executed, created ${toolMessageIds.length} tool messages`,
     );
 
-    // Refresh messages from database to ensure state is in sync
+    // Accumulate tool usage sequentially after all tools have finished
     const newState = structuredClone(state);
+    for (const result of toolResults) {
+      if (result.usageParams) {
+        const { usage, cost } = UsageCounter.accumulateTool({
+          ...result.usageParams,
+          cost: newState.cost,
+          usage: newState.usage,
+        });
+        newState.usage = usage;
+        if (cost) newState.cost = cost;
+      }
+    }
+
+    // Refresh messages from database to ensure state is in sync
 
     // Query latest messages from database
     // Must pass agentId to ensure correct query scope, otherwise when topicId is undefined,

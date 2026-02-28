@@ -123,14 +123,16 @@ function renderInlineStats(params: {
   totalToolCalls?: number;
 }): { footer: string; header: string } {
   const { elapsedMs, totalToolCalls, totalTokens, totalCost } = params;
+  const time = elapsedMs && elapsedMs > 0 ? ` · ${formatDuration(elapsedMs)}` : '';
 
   const header =
-    totalToolCalls && totalToolCalls > 0 ? `> total **${totalToolCalls}** tools calling\n\n` : '';
+    totalToolCalls && totalToolCalls > 0
+      ? `> total **${totalToolCalls}** tools calling ${time}\n\n`
+      : '';
 
   if (totalTokens <= 0) return { footer: '', header };
 
-  const time = elapsedMs && elapsedMs > 0 ? ` · ${formatDuration(elapsedMs)}` : '';
-  const footer = `\n\n-# ${formatTokens(totalTokens)} tokens · $${totalCost.toFixed(4)}${time}`;
+  const footer = `\n\n-# ${formatTokens(totalTokens)} tokens · $${totalCost.toFixed(4)}`;
 
   return { footer, header };
 }
