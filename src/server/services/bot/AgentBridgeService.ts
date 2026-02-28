@@ -194,7 +194,7 @@ export class AgentBridgeService {
       | Array<{ apiName: string; arguments?: string; identifier: string }>
       | undefined;
     let totalToolCalls = 0;
-    const startTime = Date.now();
+    let operationStartTime = 0;
 
     return new Promise<{ reply: string; topicId: string }>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -203,6 +203,8 @@ export class AgentBridgeService {
 
       let assistantMessageId: string;
       let resolvedTopicId: string;
+
+      const getElapsedMs = () => (operationStartTime > 0 ? Date.now() - operationStartTime : 0);
 
       aiAgentService
         .execAgent({
@@ -220,7 +222,7 @@ export class AgentBridgeService {
 
               const progressText = renderStepProgress({
                 ...stepData,
-                elapsedMs: Date.now() - startTime,
+                elapsedMs: getElapsedMs(),
                 lastContent: lastLLMContent,
                 lastToolsCalling,
                 totalToolCalls,
@@ -265,7 +267,7 @@ export class AgentBridgeService {
 
                 if (lastAssistantContent) {
                   const finalText = renderFinalReply(lastAssistantContent, {
-                    elapsedMs: Date.now() - startTime,
+                    elapsedMs: getElapsedMs(),
                     llmCalls: finalState.usage?.llm?.apiCalls ?? 0,
                     toolCalls: finalState.usage?.tools?.totalCalls ?? 0,
                     totalCost: finalState.cost?.total ?? 0,
@@ -307,6 +309,7 @@ export class AgentBridgeService {
         .then((result) => {
           assistantMessageId = result.assistantMessageId;
           resolvedTopicId = result.topicId;
+          operationStartTime = new Date(result.createdAt).getTime();
 
           log(
             'executeWithCallback: operationId=%s, assistantMessageId=%s, topicId=%s',

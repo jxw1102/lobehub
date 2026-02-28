@@ -116,20 +116,6 @@ export function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
-interface UsageFooterParams {
-  elapsedMs?: number;
-  llmCalls: number;
-  toolCalls: number;
-  totalCost: number;
-  totalTokens: number;
-}
-
-function renderUsageFooter(params: UsageFooterParams): string {
-  const { totalTokens, totalCost, llmCalls, toolCalls, elapsedMs } = params;
-  const time = elapsedMs && elapsedMs > 0 ? ` · ${formatDuration(elapsedMs)}` : '';
-  return `---\n**${formatTokens(totalTokens)}** tokens · $${totalCost.toFixed(4)}${time} | llm×${llmCalls} | tools×${toolCalls}`;
-}
-
 function renderInlineStats(params: {
   elapsedMs?: number;
   totalCost: number;
@@ -254,7 +240,10 @@ export function renderFinalReply(
     totalTokens: number;
   },
 ): string {
-  return `${content}\n\n${renderUsageFooter(params)}`;
+  const { totalTokens, totalCost, llmCalls, toolCalls, elapsedMs } = params;
+  const time = elapsedMs && elapsedMs > 0 ? ` · ${formatDuration(elapsedMs)}` : '';
+  const footer = `-# ${formatTokens(totalTokens)} tokens · $${totalCost.toFixed(4)}${time} | llm×${llmCalls} | tools×${toolCalls}`;
+  return `${content}\n\n${footer}`;
 }
 
 export function renderError(errorMessage: string): string {
